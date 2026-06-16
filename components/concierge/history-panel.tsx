@@ -38,7 +38,9 @@ export function HistoryPanel({
       >
         <span className="flex items-center gap-3">
           <Inbox className="size-[18px] text-primary" />
-          <span className="font-serif text-base text-foreground">Sent messages</span>
+          <span className="font-serif text-base text-foreground">
+            Gesendete Nachrichten
+          </span>
           <span className="flex min-w-[22px] items-center justify-center rounded-full bg-primary px-2 py-0.5 text-xs font-medium text-primary-foreground">
             {entries.length}
           </span>
@@ -61,7 +63,7 @@ export function HistoryPanel({
               <div className="flex flex-col items-center gap-2 py-8 text-center">
                 <Inbox className="size-7 text-muted-foreground" />
                 <p className="text-sm text-muted-foreground">
-                  Your sent messages will appear here.
+                  Deine gesendeten Nachrichten erscheinen hier.
                 </p>
               </div>
             ) : (
@@ -98,7 +100,7 @@ export function HistoryPanel({
                           </button>
                           <button
                             type="button"
-                            aria-label="Delete message"
+                            aria-label="Nachricht löschen"
                             onClick={() => onDelete(entry.id)}
                             className="shrink-0 rounded-md p-1.5 text-muted-foreground opacity-0 transition-all hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
                           >
@@ -116,7 +118,7 @@ export function HistoryPanel({
                     onClick={onClear}
                     className="rounded-lg border border-border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-destructive/60 hover:text-destructive"
                   >
-                    Clear all
+                    Alle löschen
                   </button>
                 </div>
               </>

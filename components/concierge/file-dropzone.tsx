@@ -26,11 +26,11 @@ export function FileDropzone({ files, onChange, onError }: FileDropzoneProps) {
     const next = [...files]
     for (const file of incoming) {
       if (file.size > MAX_FILE_SIZE) {
-        onError(`"${file.name}" is larger than 8 MB.`)
+        onError(`„${file.name}" ist größer als 8 MB.`)
         continue
       }
       if (next.length >= MAX_FILES) {
-        onError("You can attach up to 5 files.")
+        onError("Du kannst bis zu 5 Dateien anhängen.")
         break
       }
       next.push(file)
@@ -64,10 +64,10 @@ export function FileDropzone({ files, onChange, onError }: FileDropzoneProps) {
         </span>
         <span className="flex flex-col">
           <span className="text-sm font-medium text-foreground">
-            Drop a file here, or click to browse
+            Datei hier ablegen oder zum Auswählen klicken
           </span>
           <span className="text-xs text-muted-foreground">
-            Images, PDFs and documents — up to 8 MB each
+            Bilder, PDFs und Dokumente — je bis zu 8 MB
           </span>
         </span>
       </button>
@@ -106,7 +106,7 @@ export function FileDropzone({ files, onChange, onError }: FileDropzoneProps) {
               </span>
               <button
                 type="button"
-                aria-label={`Remove ${file.name}`}
+                aria-label={`${file.name} entfernen`}
                 onClick={() => onChange(files.filter((_, i) => i !== index))}
                 className="shrink-0 rounded-md p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
               >

@@ -203,4 +203,114 @@
       transform: translateY(0);
     }
   }
+
+  /* Sanftes, gestaffeltes Einblenden der Formularfelder */
+  .animate-stagger {
+    animation: portal-rise 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  /* Weicher Erfolgs-Haken (Pop + leichte Drehung) */
+  .animate-pop {
+    animation: portal-pop 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  }
+  @keyframes portal-pop {
+    0% {
+      opacity: 0;
+      transform: scale(0.4) rotate(-12deg);
+    }
+    100% {
+      opacity: 1;
+      transform: scale(1) rotate(0deg);
+    }
+  }
+
+  /* Ruhiger, atmender Leuchtring */
+  .animate-breathe {
+    animation: portal-breathe 3.2s ease-in-out infinite;
+  }
+  @keyframes portal-breathe {
+    0%,
+    100% {
+      box-shadow: 0 0 0 0 oklch(0.46 0.11 258 / 0.35);
+    }
+    50% {
+      box-shadow: 0 0 0 8px oklch(0.46 0.11 258 / 0);
+    }
+  }
+
+  /* Dezentes Schütteln bei Fehleingaben */
+  .animate-shake {
+    animation: portal-shake 0.45s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+  }
+  @keyframes portal-shake {
+    10%,
+    90% {
+      transform: translateX(-1px);
+    }
+    20%,
+    80% {
+      transform: translateX(2px);
+    }
+    30%,
+    50%,
+    70% {
+      transform: translateX(-4px);
+    }
+    40%,
+    60% {
+      transform: translateX(4px);
+    }
+  }
+
+  /* Schimmer-Effekt für den Sende-Button */
+  .animate-shimmer::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      110deg,
+      transparent 30%,
+      oklch(1 0 0 / 0.18) 50%,
+      transparent 70%
+    );
+    background-size: 200% 100%;
+    animation: portal-shimmer 2.8s ease-in-out infinite;
+    pointer-events: none;
+  }
+  @keyframes portal-shimmer {
+    0% {
+      background-position: 200% 0;
+    }
+    60%,
+    100% {
+      background-position: -120% 0;
+    }
+  }
+
+  /* Toast-Einblendung von unten */
+  .animate-toast-in {
+    animation: portal-toast-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  @keyframes portal-toast-in {
+    from {
+      opacity: 0;
+      transform: translate(-50%, 16px) scale(0.96);
+    }
+    to {
+      opacity: 1;
+      transform: translate(-50%, 0) scale(1);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .animate-rise,
+    .animate-stagger,
+    .animate-pop,
+    .animate-breathe,
+    .animate-shake,
+    .animate-shimmer::after,
+    .animate-toast-in {
+      animation: none !important;
+    }
+  }
 }
