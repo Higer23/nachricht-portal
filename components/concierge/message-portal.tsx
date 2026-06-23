@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState, useCallback } from "react"
 import {
   Check,
   CircleAlert,
@@ -10,6 +10,7 @@ import {
   TriangleAlert,
   X,
   Globe,
+  ChevronDown,
 } from "lucide-react"
 import { FileDropzone } from "./file-dropzone"
 import { HistoryPanel, type HistoryEntry } from "./history-panel"
@@ -21,6 +22,8 @@ const MAX_HISTORY = 20
 const MAX_MESSAGE = 2000
 
 // ====================== ÇEVİRİLER ======================
+type TranslationKey = keyof typeof translations.tr
+
 const translations = {
   tr: {
     title: "Mesaj Gönder",
@@ -45,6 +48,8 @@ const translations = {
     profanity: "Lütfen uygun olmayan ifadeleri kaldır.",
     draftSaved: "Taslak kaydedildi",
     history: "Gönderilen Mesajlar",
+    errorGeneric: "Bir hata oluştu. Lütfen tekrar deneyin.",
+    errorNetwork: "Bağlantı hatası. Lütfen internet bağlantını kontrol et.",
   },
   en: {
     title: "Send Message",
@@ -69,10 +74,38 @@ const translations = {
     profanity: "Please remove inappropriate expressions.",
     draftSaved: "Draft saved",
     history: "Sent Messages",
+    errorGeneric: "Something went wrong. Please try again.",
+    errorNetwork: "Network error. Please check your connection.",
+  },
+  de: {
+    title: "Nachricht senden",
+    subtitle: "Ein ruhiger und privater Weg, mich zu erreichen. Ich lese jedes Wort und antworte so schnell wie möglich.",
+    name: "Dein Name",
+    namePlaceholder: "z. B. Max Mustermann",
+    contact: "E-Mail oder Telefon",
+    contactHint: "optional — damit ich antworten kann",
+    contactPlaceholder: "beispiel@email.de",
+    subject: "Betreff",
+    subjectPlaceholder: "Worum geht es?",
+    message: "Deine Nachricht",
+    messagePlaceholder: "Schreibe hier deine Nachricht...",
+    attachment: "Anhang",
+    attachmentHint: "optional, max. 8 MB",
+    consent: "Mein Name, meine Nachricht und Anhänge werden gesendet. Es werden keine Standort-, IP- oder Gerätedaten erfasst.",
+    send: "Nachricht senden",
+    sending: "Wird gesendet...",
+    success: "Nachricht gesendet",
+    successText: "Deine Nachricht ist sicher angekommen. Ich melde mich bald bei dir.",
+    close: "Schließen",
+    profanity: "Bitte entferne unangemessene Ausdrücke.",
+    draftSaved: "Entwurf gespeichert",
+    history: "Gesendete Nachrichten",
+    errorGeneric: "Etwas ist schiefgelaufen. Bitte versuche es erneut.",
+    errorNetwork: "Netzwerkproblem. Bitte überprüfe deine Verbindung.",
   },
 } as const
 
-type Lang = "tr" | "en"
+type Lang = "tr" | "en" | "de"
 
 type ToastState = { type: "success" | "error"; message: string } | null
 
@@ -100,27 +133,39 @@ export function MessagePortal() {
   const [submitting, setSubmitting] = useState(false)
   const [success, setSuccess] = useState(false)
   const [toast, setToast] = useState<ToastState>(null)
+  const [showLangDropdown, setShowLangDropdown] = useState(false)
 
   const [history, setHistory] = useState<HistoryEntry[]>([])
   const [historyOpen, setHistoryOpen] = useState(false)
   const [draftSaved, setDraftSaved] = useState(false)
 
-  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const draftTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const shakeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const toastTimer = useRef<NodeJS.Timeout | null>(null)
+  const draftTimer = useRef<NodeJS.Timeout | null>(null)
+  const shakeTimer = useRef<NodeJS.Timeout | null>(null)
   const hydrated = useRef(false)
+  const formRef = useRef<HTMLFormElement>(null)
 
+  // Profanity kontrolü
   const profanity = useMemo(
     () => checkProfanity(`${name} ${subject} ${message}`),
     [name, subject, message]
   )
   const hasProfanity = !profanity.clean
 
-  // Dil ve localStorage yükleme
+  // Dil ve verileri yükle
   useEffect(() => {
+    // URL'den dil algılama
+    const urlParams = new URLSearchParams(window.location.search)
+    const urlLang = urlParams.get("lang") as Lang | null
     const savedLang = localStorage.getItem("preferredLang") as Lang | null
-    if (savedLang) setLang(savedLang)
 
+    const initialLang = (urlLang && ["tr", "en", "de"].includes(urlLang)) 
+      ? urlLang 
+      : savedLang || "tr"
+
+    setLang(initialLang)
+
+    // History ve draft yükleme
     setHistory(loadHistory())
 
     try {
@@ -133,47 +178,64 @@ export function MessagePortal() {
         setMessage(d.message ?? "")
         if (d.name || d.subject || d.message) setDraftSaved(true)
       }
-    } catch {}
+    } catch (e) {
+      console.warn("Draft yüklenemedi", e)
+    }
+
     hydrated.current = true
   }, [])
 
-  // Taslak otomatik kaydet
+  // Taslak otomatik kaydet (debounce)
   useEffect(() => {
     if (!hydrated.current) return
     if (draftTimer.current) clearTimeout(draftTimer.current)
+
     draftTimer.current = setTimeout(() => {
       if (name || contact || subject || message) {
-        localStorage.setItem(DRAFT_KEY, JSON.stringify({ name, contact, subject, message }))
+        localStorage.setItem(
+          DRAFT_KEY,
+          JSON.stringify({ name, contact, subject, message })
+        )
         setDraftSaved(true)
       }
-    }, 800)
-    return () => { if (draftTimer.current) clearTimeout(draftTimer.current) }
+    }, 650)
+
+    return () => {
+      if (draftTimer.current) clearTimeout(draftTimer.current)
+    }
   }, [name, contact, subject, message])
 
-  const showToast = (type: "success" | "error", msg: string) => {
+  const showToast = useCallback((type: "success" | "error", msg: string) => {
     setToast({ type, message: msg })
     if (toastTimer.current) clearTimeout(toastTimer.current)
-    toastTimer.current = setTimeout(() => setToast(null), 4500)
-  }
+    toastTimer.current = setTimeout(() => setToast(null), 4800)
+  }, [])
 
-  const triggerShake = () => {
+  const triggerShake = useCallback(() => {
     setShake(true)
     if (shakeTimer.current) clearTimeout(shakeTimer.current)
-    shakeTimer.current = setTimeout(() => setShake(false), 500)
-  }
+    shakeTimer.current = setTimeout(() => setShake(false), 520)
+  }, [])
 
   const changeLanguage = (newLang: Lang) => {
     setLang(newLang)
     localStorage.setItem("preferredLang", newLang)
+    setShowLangDropdown(false)
+    
+    // URL'yi de güncelle (opsiyonel)
+    const url = new URL(window.location.href)
+    url.searchParams.set("lang", newLang)
+    window.history.replaceState({}, "", url.toString())
   }
 
-  function validate() {
+  function validate(): boolean {
     const next: Record<string, string> = {}
-    if (!name.trim()) next.name = lang === "tr" ? "Lütfen adını gir." : "Please enter your name."
-    if (!subject.trim()) next.subject = lang === "tr" ? "Lütfen konu gir." : "Please enter a subject."
+    if (!name.trim()) next.name = lang === "tr" ? "Lütfen adını gir." : lang === "de" ? "Bitte gib deinen Namen ein." : "Please enter your name."
+    if (!subject.trim()) next.subject = lang === "tr" ? "Lütfen konu gir." : lang === "de" ? "Bitte gib einen Betreff ein." : "Please enter a subject."
     if (message.trim().length < 10)
-      next.message = lang === "tr" ? "Mesaj en az 10 karakter olmalı." : "Message must be at least 10 characters."
-    if (!consent) next.consent = lang === "tr" ? "Lütfen onay ver." : "Please confirm."
+      next.message = lang === "tr" ? "Mesaj en az 10 karakter olmalı." : lang === "de" ? "Die Nachricht sollte mindestens 10 Zeichen lang sein." : "Message must be at least 10 characters."
+    if (!consent) next.consent = lang === "tr" ? "Lütfen onay ver." : lang === "de" ? "Bitte bestätige vor dem Senden." : "Please confirm."
+    
     setErrors(next)
     return Object.keys(next).length === 0
   }
@@ -194,6 +256,7 @@ export function MessagePortal() {
     }
 
     setSubmitting(true)
+
     try {
       const form = new FormData()
       form.append("name", name.trim())
@@ -206,7 +269,7 @@ export function MessagePortal() {
       const data = await res.json().catch(() => ({}))
 
       if (!res.ok) {
-        showToast("error", data.error ?? (lang === "tr" ? "Bir hata oluştu." : "Something went wrong."))
+        showToast("error", data.error ?? t.errorGeneric)
         triggerShake()
         return
       }
@@ -216,10 +279,10 @@ export function MessagePortal() {
         name: name.trim(),
         subject: subject.trim(),
         message: message.trim(),
-        date: new Date().toLocaleString(lang === "tr" ? "tr-TR" : "en-US", {
-          dateStyle: "medium",
-          timeStyle: "short",
-        }),
+        date: new Date().toLocaleString(
+          lang === "tr" ? "tr-TR" : lang === "de" ? "de-DE" : "en-US",
+          { dateStyle: "medium", timeStyle: "short" }
+        ),
       }
 
       const newHistory = [entry, ...history].slice(0, MAX_HISTORY)
@@ -227,7 +290,7 @@ export function MessagePortal() {
       localStorage.setItem(HISTORY_KEY, JSON.stringify(newHistory))
       setHistoryOpen(true)
 
-      // Formu sıfırla
+      // Reset form
       setName("")
       setContact("")
       setSubject("")
@@ -238,13 +301,26 @@ export function MessagePortal() {
       setDraftSaved(false)
       localStorage.removeItem(DRAFT_KEY)
       setSuccess(true)
+      showToast("success", t.success)
     } catch {
-      showToast("error", lang === "tr" ? "Bağlantı hatası." : "Network error.")
+      showToast("error", t.errorNetwork)
       triggerShake()
     } finally {
       setSubmitting(false)
     }
   }
+
+  // Klavye kısayolu: Ctrl/Cmd + Enter
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "Enter" && !submitting) {
+        e.preventDefault()
+        handleSubmit(e as any)
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [submitting, name, subject, message, consent, files])
 
   const remaining = MAX_MESSAGE - message.length
   const canSend = !submitting && !hasProfanity
@@ -254,108 +330,125 @@ export function MessagePortal() {
       <div className="portal-grain pointer-events-none fixed inset-0" />
 
       <div className="relative mx-auto flex w-full max-w-xl flex-col gap-6">
-        {/* Dil Değiştirici */}
-        <div className="flex justify-end">
+        {/* Gelişmiş Dil Seçici */}
+        <div className="flex justify-end relative">
           <button
-            onClick={() => changeLanguage(lang === "tr" ? "en" : "tr")}
-            className="flex items-center gap-2 rounded-full border border-border bg-card/80 px-4 py-2 text-sm hover:bg-primary/10 transition-all active:scale-95"
+            onClick={() => setShowLangDropdown(!showLangDropdown)}
+            className="flex items-center gap-2 rounded-full border border-border bg-card/80 px-5 py-2.5 text-sm hover:bg-primary/10 transition-all active:scale-[0.985]"
+            aria-label="Dil değiştir"
           >
             <Globe className="size-4" />
-            {lang === "tr" ? "🇬🇧 English" : "🇹🇷 Türkçe"}
+            <span>{lang.toUpperCase()}</span>
+            <ChevronDown className={`size-3.5 transition-transform ${showLangDropdown ? "rotate-180" : ""}`} />
           </button>
+
+          {showLangDropdown && (
+            <div className="absolute right-0 mt-2 w-52 rounded-2xl border border-border bg-card p-2 shadow-xl z-50">
+              {(["tr", "en", "de"] as const).map((l) => (
+                <button
+                  key={l}
+                  onClick={() => changeLanguage(l)}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left hover:bg-primary/10 transition-colors ${lang === l ? "bg-primary/10" : ""}`}
+                >
+                  <span className="text-lg">
+                    {l === "tr" ? "🇹🇷" : l === "en" ? "🇬🇧" : "🇩🇪"}
+                  </span>
+                  <span className="font-medium">
+                    {l === "tr" ? "Türkçe" : l === "en" ? "English" : "Deutsch"}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Ana Kart */}
         <section className={`animate-rise rounded-3xl border border-border bg-card/80 p-7 shadow-[0_30px_80px_-20px_rgba(0,0,0,0.6)] backdrop-blur-sm sm:p-10 ${shake ? "animate-shake" : ""}`}>
-          <header className="flex flex-col items-center text-center">
-            <span className="animate-breathe flex size-12 items-center justify-center rounded-full border border-primary/30 bg-primary/15 font-serif text-xl text-primary-foreground">
+          {/* Header */}
+          <header className="flex flex-col items-center text-center mb-8">
+            <span className="animate-breathe flex size-14 items-center justify-center rounded-2xl border border-primary/30 bg-primary/15 font-serif text-3xl text-primary-foreground">
               N
             </span>
-            <h1 className="mt-5 text-balance font-serif text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
+            <h1 className="mt-6 text-balance font-serif text-4xl font-semibold tracking-tight text-foreground">
               {t.title}
             </h1>
-            <p className="mt-3 max-w-sm text-pretty text-sm leading-relaxed text-muted-foreground">
+            <p className="mt-4 max-w-md text-pretty text-base leading-relaxed text-muted-foreground">
               {t.subtitle}
             </p>
           </header>
 
-          <div className="my-8 h-px w-full" style={{ background: "linear-gradient(90deg, transparent, var(--border), transparent)" }} />
+          <div className="my-8 h-px w-full bg-gradient-to-r from-transparent via-border to-transparent" />
 
-          <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-6">
+          <form ref={formRef} onSubmit={handleSubmit} noValidate className="flex flex-col gap-7">
+            {/* Honeypot */}
             <input type="text" name="company" tabIndex={-1} autoComplete="off" aria-hidden="true" className="hidden" />
 
-            <Field index={0} label={t.name} error={errors.name}>
+            {/* Form Alanları */}
+            <Field label={t.name} error={errors.name}>
               <input type="text" value={name} maxLength={80} onChange={(e) => setName(e.target.value)} placeholder={t.namePlaceholder} className={inputClass(!!errors.name)} />
             </Field>
 
-            <Field index={1} label={t.contact} hint={t.contactHint} error={errors.contact}>
+            <Field label={t.contact} hint={t.contactHint} error={errors.contact}>
               <input type="text" value={contact} maxLength={120} onChange={(e) => setContact(e.target.value)} placeholder={t.contactPlaceholder} className={inputClass(false)} />
             </Field>
 
-            <Field index={2} label={t.subject} error={errors.subject}>
+            <Field label={t.subject} error={errors.subject}>
               <input type="text" value={subject} maxLength={120} onChange={(e) => setSubject(e.target.value)} placeholder={t.subjectPlaceholder} className={inputClass(!!errors.subject)} />
             </Field>
 
-            <Field index={3} label={t.message} error={errors.message}>
-              <textarea value={message} maxLength={MAX_MESSAGE} onChange={(e) => setMessage(e.target.value)} placeholder={t.messagePlaceholder} rows={6} className={`${inputClass(!!errors.message)} resize-y leading-relaxed`} />
-              <div className="mt-2 flex items-center justify-between">
-                <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  {draftSaved && (
-                    <>
-                      <span className="size-1.5 rounded-full bg-primary/70" />
-                      {t.draftSaved}
-                    </>
-                  )}
+            <Field label={t.message} error={errors.message}>
+              <textarea value={message} maxLength={MAX_MESSAGE} onChange={(e) => setMessage(e.target.value)} placeholder={t.messagePlaceholder} rows={7} className={`${inputClass(!!errors.message)} resize-y leading-relaxed`} />
+              <div className="mt-3 flex items-center justify-between text-xs">
+                <span className="flex items-center gap-1.5 text-muted-foreground">
+                  {draftSaved && <><span className="size-1.5 rounded-full bg-primary/70" />{t.draftSaved}</>}
                 </span>
-                <span className={`text-xs ${remaining < 100 ? "text-destructive" : "text-muted-foreground"}`}>
+                <span className={remaining < 80 ? "text-destructive" : "text-muted-foreground"}>
                   {message.length} / {MAX_MESSAGE}
                 </span>
               </div>
 
               {hasProfanity && (
-                <div className="animate-rise mt-2 flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2.5 text-xs leading-relaxed text-destructive">
-                  <TriangleAlert className="mt-0.5 size-4 shrink-0" />
-                  <span>{t.profanity}</span>
+                <div className="mt-3 flex gap-3 rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+                  <TriangleAlert className="mt-0.5 size-5 shrink-0" />
+                  <p>{t.profanity}</p>
                 </div>
               )}
             </Field>
 
-            <Field index={4} label={t.attachment} hint={t.attachmentHint}>
+            <Field label={t.attachment} hint={t.attachmentHint}>
               <FileDropzone files={files} onChange={setFiles} onError={(msg) => showToast("error", msg)} />
             </Field>
 
-            <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-border bg-background/40 p-4 transition-colors hover:border-primary/40">
-              <span className="relative mt-0.5 flex size-5 shrink-0 items-center justify-center">
-                <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} className="peer size-5 cursor-pointer appearance-none rounded-md border border-border bg-card transition-colors checked:border-primary checked:bg-primary" />
-                <Check className="pointer-events-none absolute size-3.5 text-primary-foreground opacity-0 transition-opacity peer-checked:opacity-100" />
-              </span>
-              <span className="text-xs leading-relaxed text-muted-foreground">{t.consent}</span>
+            {/* Consent */}
+            <label className="flex cursor-pointer items-start gap-4 rounded-2xl border border-border bg-background/50 p-5 hover:border-primary/40 transition-colors">
+              <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} className="mt-1 peer size-5 cursor-pointer accent-primary" />
+              <span className="text-sm leading-relaxed text-muted-foreground">{t.consent}</span>
             </label>
 
-            {errors.consent && <p className="-mt-3 text-xs text-destructive">{errors.consent}</p>}
+            {errors.consent && <p className="text-destructive text-sm pl-1">{errors.consent}</p>}
 
-            <button type="submit" disabled={!canSend} className={`group relative mt-1 flex w-full items-center justify-center gap-2.5 overflow-hidden rounded-xl bg-primary px-6 py-3.5 text-sm font-medium tracking-wide text-primary-foreground transition-all duration-300 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60 ${canSend ? "animate-shimmer" : ""}`}>
+            {/* Submit Button */}
+            <button
+              type="submit"
+              disabled={!canSend}
+              className={`group relative mt-2 flex w-full items-center justify-center gap-3 rounded-2xl bg-primary px-8 py-4 text-base font-medium text-primary-foreground transition-all hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70 ${canSend ? "animate-shimmer" : ""}`}
+            >
               {submitting ? (
                 <>
-                  <Loader2 className="size-4 animate-spin" />
+                  <Loader2 className="size-5 animate-spin" />
                   {t.sending}
-                </>
-              ) : hasProfanity ? (
-                <>
-                  <TriangleAlert className="size-4" />
-                  {lang === "tr" ? "İfadeyi kontrol et" : "Check expression"}
                 </>
               ) : (
                 <>
-                  <Send className="size-4 transition-transform duration-300 group-hover:translate-x-0.5" />
+                  <Send className="size-5 transition-transform group-hover:translate-x-1" />
                   {t.send}
                 </>
               )}
             </button>
 
-            <p className="flex items-center justify-center gap-1.5 text-center text-xs text-muted-foreground">
-              <Lock className="size-3" />
-              {lang === "tr" ? "Sicher zugestellt. Nur das, was du schreibst, wird geteilt." : "Securely delivered. Only what you write is shared."}
+            <p className="flex justify-center items-center gap-2 text-xs text-muted-foreground">
+              <Lock className="size-3.5" />
+              {lang === "de" ? "Sicher zugestellt. Nur das, was du schreibst, wird geteilt." : lang === "tr" ? "Sadece yazdıkların paylaşılır. Güvenli teslimat." : "Securely delivered. Only what you write is shared."}
             </p>
           </form>
         </section>
@@ -365,9 +458,9 @@ export function MessagePortal() {
           open={historyOpen}
           onToggle={() => setHistoryOpen((o) => !o)}
           onDelete={(id) => {
-            const newHistory = history.filter((e) => e.id !== id)
-            setHistory(newHistory)
-            localStorage.setItem(HISTORY_KEY, JSON.stringify(newHistory))
+            const filtered = history.filter((e) => e.id !== id)
+            setHistory(filtered)
+            localStorage.setItem(HISTORY_KEY, JSON.stringify(filtered))
           }}
           onClear={() => {
             setHistory([])
@@ -376,29 +469,32 @@ export function MessagePortal() {
         />
       </div>
 
-      {/* Success Modal */}
+      {/* Success Overlay */}
       {success && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-md transition-opacity">
-          <div className="w-full max-w-sm rounded-3xl border border-primary/30 bg-card p-9 text-center shadow-2xl">
-            <span className="mx-auto flex size-16 items-center justify-center rounded-full border border-primary/40 bg-primary/15">
-              <Check className="animate-pop size-8 text-primary-foreground" />
-            </span>
-            <h2 className="mt-5 font-serif text-2xl font-semibold text-foreground">{t.success}</h2>
-            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{t.successText}</p>
-            <button onClick={() => setSuccess(false)} className="mt-7 w-full rounded-xl border border-primary/40 bg-transparent px-6 py-2.5 text-sm text-primary-foreground/90 hover:bg-primary/10">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-md p-4">
+          <div className="w-full max-w-md rounded-3xl border border-primary/30 bg-card p-10 text-center shadow-2xl">
+            <div className="mx-auto flex size-20 items-center justify-center rounded-full border border-primary/30 bg-primary/10">
+              <Check className="size-12 text-primary animate-pop" />
+            </div>
+            <h2 className="mt-8 text-3xl font-semibold font-serif">{t.success}</h2>
+            <p className="mt-4 text-lg text-muted-foreground leading-relaxed">{t.successText}</p>
+            <button
+              onClick={() => setSuccess(false)}
+              className="mt-10 w-full rounded-2xl border border-primary/40 py-4 text-lg font-medium hover:bg-primary/5 transition-colors"
+            >
               {t.close}
             </button>
           </div>
         </div>
       )}
 
-      {/* Toast */}
+      {/* Toast Notification */}
       {toast && (
-        <div className={`animate-toast-in fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-xl border bg-card px-5 py-3.5 text-sm shadow-xl ${toast.type === "error" ? "border-destructive/40" : "border-primary/40"}`}>
-          {toast.type === "error" ? <CircleAlert className="size-4 shrink-0 text-destructive" /> : <Check className="size-4 shrink-0 text-primary-foreground" />}
-          <span className="text-foreground">{toast.message}</span>
-          <button onClick={() => setToast(null)} className="text-muted-foreground hover:text-foreground">
-            <X className="size-4" />
+        <div className="animate-toast-in fixed bottom-8 left-1/2 z-[110] -translate-x-1/2 flex items-center gap-4 rounded-2xl border bg-card px-6 py-4 shadow-2xl">
+          {toast.type === "error" ? <CircleAlert className="size-5 text-destructive" /> : <Check className="size-5 text-primary" />}
+          <span className="text-foreground pr-6">{toast.message}</span>
+          <button onClick={() => setToast(null)} aria-label="Kapat">
+            <X className="size-5 text-muted-foreground hover:text-foreground" />
           </button>
         </div>
       )}
@@ -406,19 +502,19 @@ export function MessagePortal() {
   )
 }
 
-function Field({ index = 0, label, hint, error, children }: { index?: number; label: string; hint?: string; error?: string; children: React.ReactNode }) {
+function Field({ label, hint, error, children }: { label: string; hint?: string; error?: string; children: React.ReactNode }) {
   return (
-    <div className="animate-stagger flex flex-col gap-2" style={{ animationDelay: `${index * 70}ms` }}>
-      <div className="flex items-baseline gap-2">
-        <label className="text-xs font-medium uppercase tracking-[0.1em] text-muted-foreground">{label}</label>
-        {hint && <span className="text-xs text-muted-foreground/70">{hint}</span>}
+    <div className="flex flex-col gap-2.5">
+      <div className="flex items-baseline justify-between">
+        <label className="text-xs font-medium uppercase tracking-widest text-muted-foreground">{label}</label>
+        {hint && <span className="text-xs text-muted-foreground/75">{hint}</span>}
       </div>
       {children}
-      {error && <p className="text-xs text-destructive">{error}</p>}
+      {error && <p className="text-sm text-destructive pl-1">{error}</p>}
     </div>
   )
 }
 
 function inputClass(hasError: boolean) {
-  return `w-full rounded-xl border bg-background/60 px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/60 outline-none transition-all duration-200 focus:border-primary focus:ring-2 focus:ring-primary/20 ${hasError ? "border-destructive/60" : "border-border hover:border-primary/40"}`
-        }
+  return `w-full rounded-2xl border bg-background/70 px-5 py-4 text-base placeholder:text-muted-foreground/60 focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all outline-none ${hasError ? "border-destructive" : "border-border hover:border-primary/50"}`
+                                                                     }
