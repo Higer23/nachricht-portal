@@ -1,7 +1,8 @@
-import { Analytics } from '@vercel/analytics/next'
+// app/layout.tsx
 import type { Metadata, Viewport } from 'next'
 import { DM_Sans, Playfair_Display } from 'next/font/google'
 import './globals.css'
+import { ThemeProvider } from '@/components/concierge/theme-provider'
 
 const dmSans = DM_Sans({
   variable: '--font-dm-sans',
@@ -9,17 +10,6 @@ const dmSans = DM_Sans({
   weight: ['300', '400', '500'],
 })
 
-# Manuel ekledin karanlık aydınlık mod. 
-  const [theme, setTheme] = useState("dark")
-
-<button onClick={() => {
-  const newTheme = theme === "dark" ? "light" : "dark"
-  setTheme(newTheme)
-  document.documentElement.classList.toggle("dark")
-}}>
-  {theme === "dark" ? "☀️" : "🌙"}
-</button>
-  
 const playfair = Playfair_Display({
   variable: '--font-playfair',
   subsets: ['latin'],
@@ -31,11 +21,17 @@ export const metadata: Metadata = {
   description:
     'A calm, private way to send a message. Only what you write is collected.',
   generator: 'v0.app',
+  icons: {
+    icon: '/icon.svg',
+  },
 }
 
 export const viewport: Viewport = {
-  colorScheme: 'dark',
-  themeColor: '#13161d',
+  colorScheme: 'dark light',
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#f8f9fa' },
+    { media: '(prefers-color-scheme: dark)', color: '#13161d' },
+  ],
 }
 
 export default function RootLayout({
@@ -45,11 +41,14 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="en"
-      className={`dark ${dmSans.variable} ${playfair.variable} bg-background`}
+      lang="tr"
+      className={`${dmSans.variable} ${playfair.variable}`}
+      suppressHydrationWarning
     >
-      <body className="font-sans antialiased">
-        {children}
+      <body className="font-sans antialiased bg-background text-foreground">
+        <ThemeProvider>
+          {children}
+        </ThemeProvider>
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>
