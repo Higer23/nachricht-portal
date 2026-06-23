@@ -9,6 +9,17 @@ const dmSans = DM_Sans({
   weight: ['300', '400', '500'],
 })
 
+# Manuel ekledin karanlık aydınlık mod. 
+  const [theme, setTheme] = useState("dark")
+
+<button onClick={() => {
+  const newTheme = theme === "dark" ? "light" : "dark"
+  setTheme(newTheme)
+  document.documentElement.classList.toggle("dark")
+}}>
+  {theme === "dark" ? "☀️" : "🌙"}
+</button>
+  
 const playfair = Playfair_Display({
   variable: '--font-playfair',
   subsets: ['latin'],
