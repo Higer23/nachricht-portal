@@ -12,7 +12,7 @@ A modern, privacy-first messaging system with multilingual support, file uploads
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 [![TailwindCSS](https://img.shields.io/badge/TailwindCSS-4.2.0-38B2AC?logo=tailwind-css)](https://tailwindcss.com)
 
-[**🚀 Live Demo**](#) • [📖 Dokumentation](#deutsch) • [💬 Issues](https://github.com/yourname/nachricht-portal/issues)
+[**🚀 Live Demo**](#) • [📖 Dokumentation](#deutsch) • [💬 Issues](https://communication-portal-design.vercel.app/)
 
 </div>
 
