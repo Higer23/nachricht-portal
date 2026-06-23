@@ -1,10 +1,18 @@
-// Bu dosya artık yalnızca bir sarmalayıcı görevi görür.
-// Gerçek layout app/[lang]/layout.tsx içindedir.
-// globals.css burada import edilmez — [lang]/layout.tsx üstlenir.
+import type { Metadata } from "next"
+import "./globals.css"
+
+export const metadata: Metadata = {
+  title: "Concierge",
+}
+
 export default function RootLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  return children
+  return (
+    <html>
+      <body>{children}</body>
+    </html>
+  )
 }
